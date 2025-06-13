@@ -5,8 +5,6 @@ import mongoose from 'mongoose';
 class VoteController {
     // Vote on a poll option
     async vote(req, res) {
-        const session = await mongoose.startSession();
-        session.startTransaction();
 
         try {
             const { pollId } = req.params;
@@ -14,7 +12,7 @@ class VoteController {
             const userId = req.user._id;
 
             // Check if poll exists and is not locked
-            const poll = await PollModel.findById(pollId).session(session);
+            const poll = await PollModel.findById(pollId);
             if (!poll) {
                 return res.status(404).json({
                     success: false,
@@ -31,6 +29,7 @@ class VoteController {
 
             // Check if option exists in poll
             if (!poll.options.includes(optionId)) {
+                console.error(`Option ${optionId} not found in poll ${pollId}`);
                 return res.status(400).json({
                     success: false,
                     message: 'Invalid option'
@@ -41,7 +40,7 @@ class VoteController {
             const existingVote = await VoteModel.findOne({
                 _id: optionId,
                 userVote: userId
-            }).session(session);
+            });
 
             if (existingVote) {
                 return res.status(400).json({
@@ -57,37 +56,30 @@ class VoteController {
                     $inc: { voteCount: 1 },
                     $push: { userVote: userId }
                 },
-                { session }
             );
 
             // Update poll vote count
             await PollModel.findByIdAndUpdate(
                 pollId,
                 { $inc: { voteCount: 1 } },
-                { session }
             );
 
-            await session.commitTransaction();
 
             return res.status(200).json({
                 success: true,
                 message: 'Vote recorded successfully'
             });
         } catch (error) {
-            await session.abortTransaction();
+            
             return res.status(500).json({
                 success: false,
                 message: error.message
             });
-        } finally {
-            session.endSession();
         }
     }
 
     // Remove vote from a poll option
     async unvote(req, res) {
-        const session = await mongoose.startSession();
-        session.startTransaction();
 
         try {
             const { pollId } = req.params;
@@ -95,7 +87,7 @@ class VoteController {
             const userId = req.user._id;
 
             // Check if poll exists and is not locked
-            const poll = await PollModel.findById(pollId).session(session);
+            const poll = await PollModel.findById(pollId);
             if (!poll) {
                 return res.status(404).json({
                     success: false,
@@ -114,7 +106,7 @@ class VoteController {
             const existingVote = await VoteModel.findOne({
                 _id: optionId,
                 userVote: userId
-            }).session(session);
+            });
 
             if (!existingVote) {
                 return res.status(400).json({
@@ -129,31 +121,24 @@ class VoteController {
                 {
                     $inc: { voteCount: -1 },
                     $pull: { userVote: userId }
-                },
-                { session }
+                }
             );
 
             // Update poll vote count
             await PollModel.findByIdAndUpdate(
                 pollId,
-                { $inc: { voteCount: -1 } },
-                { session }
+                { $inc: { voteCount: -1 } }
             );
-
-            await session.commitTransaction();
 
             return res.status(200).json({
                 success: true,
                 message: 'Vote removed successfully'
             });
         } catch (error) {
-            await session.abortTransaction();
             return res.status(500).json({
                 success: false,
                 message: error.message
             });
-        } finally {
-            session.endSession();
         }
     }
 

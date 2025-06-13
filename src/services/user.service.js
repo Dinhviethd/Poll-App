@@ -105,7 +105,6 @@ class UserService{
   async Update(id, updateData) {
     if (!mongoose.Types.ObjectId.isValid(id)) return null;
     try {
-      // If password is being updated, hash it
       if (updateData.password) {
         updateData.password = await bcrypt.hash(updateData.password, 10);
       }
