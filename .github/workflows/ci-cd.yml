@@ -38,28 +38,56 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          # SỬA LỖI: 'script' và toàn bộ nội dung của nó phải được thụt vào trong khối 'with'
           script: |
-            # Tạo thư mục làm việc nếu chưa có, không cần git clone
-            export APP_DIR="~/PollVoteApp"
+            # === 1. DEBUGGING: CHECK CONTEXT ===
+            echo "--- Starting deployment script with sudo ---"
+            echo "Current user: $(whoami)"
+            
+            # === 2. CREATE DIRECTORY AND NAVIGATE ===
+            export APP_DIR="/home/ubuntu/PollVoteApp"
+            echo "Working directory is set to: $APP_DIR"
             mkdir -p $APP_DIR
             cd $APP_DIR
+            echo "Current directory is now: $(pwd)"
 
-            # 1. Tạo file .env từ GitHub Secrets
-            echo "PORT=${{ secrets.PORT }}" > .env
-            echo "MONGODB_URI=${{ secrets.MONGODB_URI }}" >> .env
-            echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
+            # === 3. CREATE CONFIG FILES FROM SECRETS ===
+            echo "--- Creating .env file ---"
+            # Ghi file .env một cách an toàn hơn để xử lý các ký tự đặc biệt
+            cat <<EOF > .env
+            PORT=${{ secrets.PORT }}
+            MONGODB_URI=${{ secrets.MONGODB_URI }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            EOF
 
-            # 2. Tạo file docker-compose.yml từ GitHub Secret
+            echo "--- Creating docker-compose.yml file ---"
             echo "${{ secrets.DOCKER_COMPOSE_CONTENT }}" > docker-compose.yml
+            
+            # === 4. RUN THE APPLICATION WITH SUDO ===
+            echo "--- Running application with Docker Compose (using sudo) ---"
+            # Thêm 'sudo' vào trước TẤT CẢ các lệnh docker
+            sudo docker compose down --remove-orphans || true
+            sudo docker compose pull
+            sudo docker compose up -d
 
-            # 3. Chạy ứng dụng bằng Docker Compose
-            # docker-compose down để dừng và xóa container cũ
-            docker-compose down || true
-            # docker-compose up sẽ tự động pull image mới nhất nếu có
-            docker-compose up -d
+            # === 5. FINAL VERIFICATION STEP ===
+            echo "--- Verifying running containers (waiting 5 seconds) ---"
+            sleep 5
+            sudo docker ps
+            
+            # Kiểm tra xem có ít nhất 2 container đang chạy không. Nếu không, làm cho workflow thất bại.
+            if [ $(sudo docker ps -q | wc -l) -lt 2 ]; then
+              echo "🔴🔴🔴 DEPLOYMENT FAILED: Containers are not running."
+              echo "--- Displaying logs for myapp container for debugging: ---"
+              sudo docker logs pollvoteapp-container || echo "Could not retrieve logs for myapp."
+              exit 1
+            fi
 
-            # 4. Dọn dẹp image cũ không dùng đến
-            docker image prune -af
+            echo "✅✅✅ DEPLOYMENT SUCCESSFUL: Containers are up and running."
+            
+            # === 6. CLEANUP ===
+            echo "--- Pruning Docker images ---"
+            sudo docker image prune -af
 
       - name: Send notification
         if: always()
