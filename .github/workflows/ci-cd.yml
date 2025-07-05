@@ -67,10 +67,10 @@ jobs:
             
             # === 4. RUN THE APPLICATION WITH SUDO ===
             echo "--- Running application with Docker Compose (using sudo) ---"
-            # SỬA LỖI: Thêm cờ '--env-file ./.env' để chỉ định rõ file cấu hình
-            sudo docker compose --env-file ./.env down --remove-orphans || true
-            sudo docker compose --env-file ./.env pull
-            sudo docker compose --env-file ./.env up -d
+            # SỬA LỖI: Sử dụng đường dẫn TUYỆT ĐỐI cho --env-file
+            sudo docker compose --env-file $APP_DIR/.env down --remove-orphans || true
+            sudo docker compose --env-file $APP_DIR/.env pull
+            sudo docker compose --env-file $APP_DIR/.env up -d
 
             # === 5. FINAL VERIFICATION STEP ===
             echo "--- Verifying running containers (waiting 5 seconds) ---"
