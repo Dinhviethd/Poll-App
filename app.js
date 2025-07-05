@@ -2,8 +2,22 @@ import express from 'express'
 import dotenv from 'dotenv'
 import router from './src/routes/index.js'
 import mongoInstance from './src/configs/mongoose.config.js'
+
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import path from 'path'
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const app = express()
 dotenv.config()
+//view engine
+app.set('view engine', 'ejs')
+app.set('views', path.join(__dirname, 'src', 'views'))
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'src', 'views', 'index.html'));
+});
 
 async function startServer() {
   const connectString = process.env.MONGODB_URI
