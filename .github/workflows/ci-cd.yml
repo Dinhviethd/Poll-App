@@ -40,44 +40,41 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           # SỬA LỖI: 'script' và toàn bộ nội dung của nó phải được thụt vào trong khối 'with'
           script: |
-            # === 1. DEBUGGING: CHECK CONTEXT ===
-            echo "--- Starting deployment script with sudo ---"
-            echo "Current user: $(whoami)"
-            
-            # === 2. CREATE DIRECTORY AND NAVIGATE ===
+            # === 1. SETUP DIRECTORY ===
             export APP_DIR="/home/ubuntu/PollVoteApp"
-            echo "Working directory is set to: $APP_DIR"
             mkdir -p $APP_DIR
             cd $APP_DIR
-            echo "Current directory is now: $(pwd)"
 
-            # === 3. CREATE CONFIG FILES FROM SECRETS ===
-            echo "--- Creating .env file ---"
-            cat <<EOF > .env
-            PORT=${{ secrets.PORT }}
-            MONGODB_URI=${{ secrets.MONGODB_URI }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            EOF
-
-            echo "--- Creating docker-compose.yml file ---"
-            # SỬA LỖI: Sử dụng 'cat <<EOF' để ghi file YAML một cách an toàn
+            # === 2. CREATE THE BASE DOCKER-COMPOSE FILE ===
+            echo "--- Creating base docker-compose.yml file ---"
             cat <<EOF > docker-compose.yml
             ${{ secrets.DOCKER_COMPOSE_CONTENT }}
             EOF
             
-            # === 4. RUN THE APPLICATION WITH SUDO ===
+            # === 3. INJECT SECRETS DIRECTLY INTO DOCKER-COMPOSE FILE ===
+            echo "--- Injecting secrets into docker-compose.yml ---"
+            # Sử dụng 'sed' để tìm và thay thế các placeholder
+            # Dấu '|' được dùng làm phân cách để tránh lỗi nếu secret chứa ký tự '/'
+            sed -i "s|__PORT__|${{ secrets.PORT }}|g" docker-compose.yml
+            sed -i "s|__MONGODB_URI__|${{ secrets.MONGODB_URI }}|g" docker-compose.yml
+            sed -i "s|__JWT_SECRET__|${{ secrets.JWT_SECRET }}|g" docker-compose.yml
+            
+            # === 4. DEBUGGING: DISPLAY THE FINAL CONFIG FILE ===
+            echo "--- Displaying final docker-compose.yml after injection ---"
+            cat docker-compose.yml
+            
+            # === 5. RUN THE APPLICATION WITH SUDO ===
             echo "--- Running application with Docker Compose (using sudo) ---"
-            # SỬA LỖI: Sử dụng đường dẫn TUYỆT ĐỐI cho --env-file
-            sudo docker compose --env-file $APP_DIR/.env down --remove-orphans || true
-            sudo docker compose --env-file $APP_DIR/.env pull
-            sudo docker compose --env-file $APP_DIR/.env up -d
+            # Bây giờ không cần --env-file nữa
+            sudo docker compose down --remove-orphans || true
+            sudo docker compose pull
+            sudo docker compose up -d
 
-            # === 5. FINAL VERIFICATION STEP ===
+            # === 6. FINAL VERIFICATION STEP ===
             echo "--- Verifying running containers (waiting 5 seconds) ---"
             sleep 5
             sudo docker ps
             
-            # Kiểm tra xem có ít nhất 2 container đang chạy không. Nếu không, làm cho workflow thất bại.
             if [ $(sudo docker ps -q | wc -l) -lt 2 ]; then
               echo "🔴🔴🔴 DEPLOYMENT FAILED: Containers are not running."
               echo "--- Displaying logs for myapp container for debugging: ---"
@@ -87,7 +84,7 @@ jobs:
 
             echo "✅✅✅ DEPLOYMENT SUCCESSFUL: Containers are up and running."
             
-            # === 6. CLEANUP ===
+            # === 7. CLEANUP ===
             echo "--- Pruning Docker images ---"
             sudo docker image prune -af
 
