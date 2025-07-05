@@ -27,11 +27,10 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN}}
 
-      - name: Build Docker image
-        run: docker build -t viethd4a1/pollvoteapp:latest .
-
-      - name: Push Docker image
-        run: docker push viethd4a1/pollvoteapp:latest
+      - name: Build and Push Docker image
+        run: |
+          docker build -t viethd4a1/pollvoteapp:latest .
+          docker push viethd4a1/pollvoteapp:latest
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@master
@@ -40,22 +39,37 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
-            cd ~/PollVoteApp || git clone https://github.com/Dinhviethd/Poll-App.git ~/PollVoteApp
-            cd ~/PollVoteApp
+            # Tạo thư mục làm việc nếu chưa có, không cần git clone
+            export APP_DIR="~/PollVoteApp"
+            mkdir -p $APP_DIR
+            cd $APP_DIR
+
+            # 1. Tạo file .env từ GitHub Secrets
+            echo "PORT=${{ secrets.PORT }}" > .env
+            echo "MONGODB_URI=${{ secrets.MONGODB_URI }}" >> .env
+            echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
+
+            # 2. Tạo file docker-compose.yml từ GitHub Secret
+            echo "${{ secrets.DOCKER_COMPOSE_CONTENT }}" > docker-compose.yml
+
+            # 3. Chạy ứng dụng bằng Docker Compose
+            # docker-compose down để dừng và xóa container cũ
             docker-compose down || true
-            docker pull viethd4a1/pollvoteapp:latest
+            # docker-compose up sẽ tự động pull image mới nhất nếu có
             docker-compose up -d
-            docker image prune -f
+
+            # 4. Dọn dẹp image cũ không dùng đến
+            docker image prune -af
 
       - name: Send notification
         if: always()
         run: |
           if [ "${{ job.status }}" == "success" ]; then
-            echo "Pipeline completed successfully!"
-            echo "Deployment ready for PollVote"
+            echo "✅ Pipeline completed successfully!"
+            echo "✅ Deployment ready for PollVote"
           else
-            echo "Pipeline failed!"
-            echo "Please check the logs for issues"
+            echo "❌ Pipeline failed!"
+            echo "❌ Please check the logs for issues"
           fi
 
       - name: Generate deployment report
@@ -69,5 +83,5 @@ jobs:
           echo "Author: ${{ github.actor }}" >> deployment-report.txt
           echo "Status: SUCCESS" >> deployment-report.txt
           echo "" >> deployment-report.txt
-          echo "Image pushed to Docker Hub" >> deployment-report.txt
+          echo "Image pushed to Docker Hub: viethd4a1/pollvoteapp:latest" >> deployment-report.txt
           echo "Deployed to EC2 successfully" >> deployment-report.txt

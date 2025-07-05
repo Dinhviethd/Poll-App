@@ -1,3 +1,4 @@
+version: '3.8'
 services:
   db:
     image: mongo:7.0
@@ -9,19 +10,17 @@ services:
       - pollvote_network
     volumes:
       - mongodb:/data/db
-
   myapp:
-    image: viethd4a1/demoexpress:latest:latest
-    container_name: demoexpress
+    image: viethd4a1/pollvoteapp:latest
+    container_name: pollvoteapp-container 
     ports:
-      - '${PORT}:${PORT}'
+      # Biến PORT sẽ được đọc từ file .env
+      - "${PORT}:${PORT}"
     depends_on:
       - db
     restart: always
-    environment:
-      - PORT=${PORT}
-      - MONGODB_URI=${MONGODB_URI}
-      - JWT_SECRET=${JWT_SECRET}
+    env_file:
+      - ./.env
     networks:
       - pollvote_network
 
